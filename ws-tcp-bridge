@@ -10,14 +10,24 @@ var argv = require('optimist')
 			.demand('rhost')
 			.describe('rhost','address to forward the connection to.')
 			.demand('method')
-			.describe('method','either tcp2ws or ws2tcp').argv;
+			.describe('method','either tcp2ws or ws2tcp')
+			.default('protocol', 'binary, base64')
+			.describe('protocol', 'the websockets client subprotocol (used with tcp2ws)').argv;
 
+var is_tcp2ws = (argv.method == 'tcp2ws');
 
-var wsMask = (argv.method == 'tcp2ws');
-var binary = true
-var protocol = binary ? "binary" : "base64";
 
 function initSocketCallbacks(state,ws,s) {
+
+	function code_from_ws(data) {
+		if (state.binary) { return data; }
+		return tcp2ws ? new Buffer(data, 'base64') : data.toString('base64');
+	}
+
+	function code_from_s(data) {
+		if (state.binary) { return data; }
+		return tcp2ws ? data.toString('base64') : new Buffer(data, 'base64');
+	}
 
 	function flushSocketBuffer() {
 		if(state.sBuffer.length > 0) {
@@ -28,7 +38,7 @@ function initSocketCallbacks(state,ws,s) {
 
 	function flushWebsocketBuffer() {
 		if(state.wsBuffer.length > 0) {
-			ws.send(Buffer.concat(state.wsBuffer),{binary: binary,mask: wsMask});
+			ws.send(Buffer.concat(state.wsBuffer),{binary: state.binary, mask: is_tcp2ws});
 		}
 		state.wsBuffer = null;
 	};
@@ -72,15 +82,17 @@ function initSocketCallbacks(state,ws,s) {
 	});
 
 	s.on('data', function(data) {
-
+		data = code_from_s(data);
 		if(! state.wsReady) {
 			state.wsBuffer.push(data);
 		} else {
-			ws.send(data,{binary: binary,mask: wsMask});
+			ws.send(data,{binary: state.binary, mask: is_tcp2ws});
 		}
 	});
 
 	ws.on('message', function(m,flags) {
+		state.binary = flags.binary;
+		m = code_from_ws(m);
 		if(!state.sReady) {
 			state.sBuffer.push(m);
 		} else {
@@ -94,13 +106,16 @@ function tcp2ws() {
 	console.log('forwarding port ' + argv.lport + ' to ' + argv.rhost);
 
 	var server = net.createServer(function(s) {
-		var ws = new ws_module(argv.rhost, null, {"protocol": protocol});
+		var ws = new ws_module(argv.rhost, {
+			"protocol": 'binary, base64'
+		});
 		
 		var state = {
 			sReady : true,
 			wsReady : false,
 			wsBuffer: [],
-			sBuffer : []
+			sBuffer : [],
+			binary: false
 		};
 		initSocketCallbacks(state,ws,s);
 	});
@@ -121,14 +136,15 @@ function ws2tcp() {
 			sReady : false,
 			wsReady : true, // there is no callback so i assume its already connected
 			wsBuffer: [],
-			sBuffer : []
+			sBuffer : [],
+			binary: false
 		};
 		initSocketCallbacks(state,ws,s);
 	});
 
 }
 
-if(argv.method == 'tcp2ws') {
+if(is_tcp2ws) {
 	tcp2ws();
 } else if (argv.method == 'ws2tcp') {
 	ws2tcp();
