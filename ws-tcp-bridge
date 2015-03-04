@@ -14,6 +14,8 @@ var argv = require('optimist')
 
 
 var wsMask = (argv.method == 'tcp2ws');
+var binary = true
+var protocol = binary ? "binary" : "base64";
 
 function initSocketCallbacks(state,ws,s) {
 
@@ -26,7 +28,7 @@ function initSocketCallbacks(state,ws,s) {
 
 	function flushWebsocketBuffer() {
 		if(state.wsBuffer.length > 0) {
-			ws.send(Buffer.concat(state.wsBuffer),{binary: true,mask: wsMask});
+			ws.send(Buffer.concat(state.wsBuffer),{binary: binary,mask: wsMask});
 		}
 		state.wsBuffer = null;
 	};
@@ -74,7 +76,7 @@ function initSocketCallbacks(state,ws,s) {
 		if(! state.wsReady) {
 			state.wsBuffer.push(data);
 		} else {
-			ws.send(data,{binary: true,mask: wsMask});
+			ws.send(data,{binary: binary,mask: wsMask});
 		}
 	});
 
@@ -92,7 +94,7 @@ function tcp2ws() {
 	console.log('forwarding port ' + argv.lport + ' to ' + argv.rhost);
 
 	var server = net.createServer(function(s) {
-		var ws = new ws_module(argv.rhost);
+		var ws = new ws_module(argv.rhost, null, {"protocol": protocol});
 		
 		var state = {
 			sReady : false,
