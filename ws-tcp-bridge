@@ -97,7 +97,7 @@ function tcp2ws() {
 		var ws = new ws_module(argv.rhost, null, {"protocol": protocol});
 		
 		var state = {
-			sReady : false,
+			sReady : true,
 			wsReady : false,
 			wsBuffer: [],
 			sBuffer : []
